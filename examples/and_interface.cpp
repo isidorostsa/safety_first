@@ -17,6 +17,7 @@ struct _and {
     static propagate_errors_if_t<true> implementation(Case& c, std::tuple<r, r> const& args) {
         constexpr bool care_about_this = true;
         constexpr bool is_being_checked = true;
+        constexpr bool in_preconditions = false;
 
         auto&& [a, b] = args;
 
@@ -30,6 +31,7 @@ struct _and {
 
     template<bool care_about_this, bool is_being_checked = false>
     static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<r, r> args) {
+        INTERFACE_START;
         static_assert(!is_being_checked || care_about_this);
 
         auto&& [a, b] = args;
@@ -52,7 +54,7 @@ struct _and {
     }
 
     static auto check(Case& c) {
-        return interface<true>(c, {c.make_r(), c.make_r()});
+        return interface<true, true>(c, {c.make_r(), c.make_r()});
     }
 
 };

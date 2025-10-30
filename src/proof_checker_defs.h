@@ -2,8 +2,7 @@
 // Created by ros on 9/26/25.
 //
 
-#ifndef TEST_FILES_PROOF_CHECKER_DEFS_H
-#define TEST_FILES_PROOF_CHECKER_DEFS_H
+#pragma once
 
 #include <exception>
 #include <expected>
@@ -13,7 +12,6 @@
 #include <variant>
 #include "case.h"
 
-#define FWD(x) std::forward<decltype(x)>(x)
 
 #define _JOIN(x, y) x##y
 #define JOIN(x, y) _JOIN(x, y)
@@ -39,7 +37,7 @@
     (!in_preconditions && (care_about_this && is_being_checked))
 
 #define _CALL_INTERFACE(type, var_name, foo, temp_var_name, ...)    \
-    auto temp_var_name = interface<CARE, false                      \
+    auto temp_var_name = foo::interface<CARE, false                      \
         >(c, {APPLY(MAKE_R_COPY, __VA_ARGS__)});                    \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
@@ -74,9 +72,21 @@
     }();                                                    \
     (void)0
 
-#define DISCERN(x) c.discern(x)
+#define DISCERN(x)                                          \
+    c.template discern<in_preconditions>(x,                 \
+        func_name, func_call)
 
-#define CLAIM(x) \
+#define SUBSTITUTABLE(x, y)                                 \
+    if(not c.substitutable(x, y)) {                         \
+        if constexpr (CARE) {                               \
+            return std::unexpected(erroneous_branch_t{});   \
+        } else {                                            \
+            return std::unexpected(impossible_branch_t{});  \
+        }                                                   \
+    }                                                       \
+    (void)0
+
+#define CLAIM(x)                                            \
     if(not c.claim(x)) {                                    \
         if constexpr (CARE) {                               \
             return std::unexpected(erroneous_branch_t{});   \
@@ -85,6 +95,11 @@
         }                                                   \
     }                                                       \
     (void)0
+
+#define INTERFACE_START                                         \
+    static_assert(in_preconditions);                            \
+    static_assert(!is_being_checked || care_about_this);        \
+    auto [func_name, func_call] = get_call_uuid()
 
 #define RETURN_RESULT                   \
     static_assert(!in_preconditions);   \
@@ -127,6 +142,7 @@ bool verify_interface() {
                 return false;
             }
         }
+        std::println("Function table: {}", c.repeatability_table);
     } while (c.prepare_next_iteration());
 
     if (!found_successful_case) {
@@ -137,5 +153,3 @@ bool verify_interface() {
     std::println("Finished");
     return true;
 }
-
-#endif //TEST_FILES_PROOF_CHECKER_DEFS_H
