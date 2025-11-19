@@ -14,10 +14,10 @@ struct _some {
 };
 
 struct _and {
+    constexpr static std::source_location loc = std::source_location::current();
+
     static propagate_errors_if_t<true> implementation(Case& c, std::tuple<r, r> const& args) {
-        constexpr bool care_about_this = true;
-        constexpr bool is_being_checked = true;
-        constexpr bool in_preconditions = false;
+        IMPLEMENTATION_START;
 
         auto&& [a, b] = args;
 

@@ -1,7 +1,3 @@
-//
-// Created by ros on 9/26/25.
-//
-
 #pragma once
 
 #include <exception>
@@ -29,7 +25,8 @@
 
 #define MAKE_R_COPY(x) c.make_r_copy(x)
 
-#define IF(x) if(c.next(x))
+#define IF(x)                                                               \
+    if(c.next<in_preconditions>(x, {function_name, function_call}))
 
 #define CARE \
     (in_preconditions && (care_about_this && !is_being_checked))    \
@@ -37,7 +34,7 @@
     (!in_preconditions && (care_about_this && is_being_checked))
 
 #define _CALL_INTERFACE(type, var_name, foo, temp_var_name, ...)    \
-    auto temp_var_name = foo::interface<CARE, false                      \
+    auto temp_var_name = foo::interface<CARE, false                 \
         >(c, {APPLY(MAKE_R_COPY, __VA_ARGS__)});                    \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
@@ -74,7 +71,7 @@
 
 #define DISCERN(x)                                          \
     c.template discern<in_preconditions>(x,                 \
-        func_name, func_call)
+        function_name, function_call)
 
 #define SUBSTITUTABLE(x, y)                                 \
     if(not c.substitutable(x, y)) {                         \
@@ -99,7 +96,14 @@
 #define INTERFACE_START                                         \
     static_assert(in_preconditions);                            \
     static_assert(!is_being_checked || care_about_this);        \
-    auto [func_name, func_call] = get_call_uuid()
+    auto [function_name, function_call] = get_call_uuid(loc)
+
+#define IMPLEMENTATION_START                                \
+    constexpr bool care_about_this = true;                  \
+    constexpr bool is_being_checked = true;                 \
+    constexpr bool in_preconditions = false;                \
+    auto [function_name, function_call] = get_call_uuid(loc)
+
 
 #define RETURN_RESULT                   \
     static_assert(!in_preconditions);   \
@@ -142,7 +146,6 @@ bool verify_interface() {
                 return false;
             }
         }
-        std::println("Function table: {}", c.repeatability_table);
     } while (c.prepare_next_iteration());
 
     if (!found_successful_case) {

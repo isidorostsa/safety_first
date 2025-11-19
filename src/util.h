@@ -14,4 +14,3 @@ concept view_of = std::ranges::view<T> && std::same_as<std::ranges::range_value_
 
 template<typename T, typename R>
 concept range_of = std::ranges::range<T> && std::same_as<std::ranges::range_value_t<T>, R>;
-
