@@ -36,7 +36,7 @@ struct Case {
     // True and false nodes for this case
     static constexpr r _true = r(0);
     static constexpr r _false = r(1);
-    static constexpr std::array true_and_false = {_true.get_uuid(), _false.get_uuid()};
+    static constexpr std::array both_true_and_false = {_true.get_uuid(), _false.get_uuid()};
 
     explicit Case() : values(), current(values.begin()) {
         ledger.track_substitutability(_true.get_uuid());
@@ -49,7 +49,7 @@ private:
     }
 
 
-    std::optional<bool> decided_direction(r const &g) {
+    std::optional<bool> decided_direction(r const &g) const {
         auto const reachables = ledger.reachable_nodes_from(g.get_uuid());
         if (reachables.contains(_true.get_uuid()) and reachables.contains(_false.get_uuid())) {
             throw;
@@ -66,11 +66,25 @@ public:
         ledger.set_substitutable(t1.get_uuid(), t2.get_uuid());
 
         // Make sure the new addition did not make true == false
-        return !std::ranges::includes(ledger.reachable_nodes_from(t1.get_uuid()), true_and_false);
+        return !std::ranges::includes(ledger.reachable_nodes_from(t1.get_uuid()), both_true_and_false);
     }
 
-    bool claim(r const &t) const {
-        return ledger.is_substitutable_with(t.get_uuid(), _true.get_uuid());
+    template<bool responsible>
+    bool claim(r const &t) {
+        if constexpr (responsible) {
+            return ledger.is_substitutable_with(t.get_uuid(), _true.get_uuid());
+        } else { // Other neighborhood responsible for this
+            bool const not_false = not ledger.is_substitutable_with(t.get_uuid(), _false.get_uuid());
+
+            if (not_false) {
+                // This is definitely not sub with false given the condition,
+                // so it should be valid to set to _true
+                bool const valid = substitutable(t, _true);
+                assert(valid);
+            }
+
+            return not_false;
+        }
     }
 
 
@@ -97,12 +111,7 @@ public:
         return result;
     }
 
-    template<bool in_preconditions>
-    bool next(r const &guard, std::pair<uuid_t, uuid_t> const call_info) {
-        auto const [function_name, function_call] = call_info;
-
-        discern<in_preconditions>(guard, function_name, function_call);
-
+    bool next(r const &guard) {
         if (current == values.end()) {
             expand(guard);
         }

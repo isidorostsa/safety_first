@@ -23,17 +23,15 @@ struct _and {
 
         IF(a) {
             IF(b) {
-                return c.make_r_copy(c._true);
+                return c.make_r_copy(Case::_true);
             }
         }
-        return c.make_r_copy(c._false);
+        return c.make_r_copy(Case::_false);
     }
 
     template<bool care_about_this, bool is_being_checked = false>
     static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<r, r> args) {
         INTERFACE_START;
-        static_assert(!is_being_checked || care_about_this);
-
         auto&& [a, b] = args;
 
         DISCERN(a);

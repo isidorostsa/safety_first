@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.30.5)
-project(test_files)
 
 # Use Clang
 set(CMAKE_CXX_COMPILER /usr/local/bin/clang++)
@@ -9,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 
+project(test_files)
 # Add src directory to include path
 include_directories(src)
 

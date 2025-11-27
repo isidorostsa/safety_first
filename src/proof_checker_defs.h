@@ -1,16 +1,12 @@
 #pragma once
 
-#include <exception>
 #include <expected>
-
-#include "uuid.h"
-
 #include <variant>
 #include "case.h"
 
 
-#define _JOIN(x, y) x##y
-#define JOIN(x, y) _JOIN(x, y)
+#define JOIN_IMPL(x, y) x##y
+#define JOIN(x, y) JOIN_IMPL(x, y)
 
 #define NUM_ARGS_IMPL(_1, _2, _3, _4, _5, COUNT, ...) COUNT
 #define NUM_ARGS(...) NUM_ARGS_IMPL(__VA_ARGS__, 5, 4, 3, 2, 1)
@@ -25,16 +21,18 @@
 
 #define MAKE_R_COPY(x) c.make_r_copy(x)
 
-#define IF(x)                                                               \
-    if(c.next<in_preconditions>(x, {function_name, function_call}))
+#define IF(x)                                                           \
+    if(                                                                 \
+        c.discern<in_preconditions>(x, function_name, function_call),   \
+        c.next(x))
 
-#define CARE \
+#define RESPONSIBLE \
     (in_preconditions && (care_about_this && !is_being_checked))    \
     ||                                                              \
     (!in_preconditions && (care_about_this && is_being_checked))
 
-#define _CALL_INTERFACE(type, var_name, foo, temp_var_name, ...)    \
-    auto temp_var_name = foo::interface<CARE, false                 \
+#define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, ...)\
+    auto temp_var_name = foo::interface<RESPONSIBLE, false                 \
         >(c, {APPLY(MAKE_R_COPY, __VA_ARGS__)});                    \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
@@ -43,11 +41,14 @@
     (void)0
 
 #define CALL_INTERFACE(type, var_name, foo, ...)            \
-    _CALL_INTERFACE(type, var_name, foo,                    \
+    CALL_INTERFACE_IMPL(type, var_name, foo,                \
     JOIN(__call_interface_temp_, __COUNTER__), __VA_ARGS__)
 
 #define IMPLEMENTATION                                      \
+_Pragma("clang diagnostic push")                            \
+_Pragma("clang diagnostic ignored \"-Wshadow\"")            \
     constexpr bool in_preconditions = false;                \
+_Pragma("clang diagnostic pop")                             \
     auto __result_tmp = [&] {                               \
         if constexpr (is_being_checked) {                   \
             return implementation(c, args);                 \
@@ -70,12 +71,12 @@
     (void)0
 
 #define DISCERN(x)                                          \
-    c.template discern<in_preconditions>(x,                 \
+    c.discern<in_preconditions>(x,                          \
         function_name, function_call)
 
 #define SUBSTITUTABLE(x, y)                                 \
     if(not c.substitutable(x, y)) {                         \
-        if constexpr (CARE) {                               \
+        if constexpr (RESPONSIBLE) {                               \
             return std::unexpected(erroneous_branch_t{});   \
         } else {                                            \
             return std::unexpected(impossible_branch_t{});  \
@@ -84,8 +85,9 @@
     (void)0
 
 #define CLAIM(x)                                            \
-    if(not c.claim(x)) {                                    \
-        if constexpr (CARE) {                               \
+    DISCERN(x);                                             \
+    if(not c.claim<RESPONSIBLE>(x)) {                       \
+        if constexpr (RESPONSIBLE) {                        \
             return std::unexpected(erroneous_branch_t{});   \
         } else {                                            \
             return std::unexpected(impossible_branch_t{});  \
@@ -101,7 +103,10 @@
 #define IMPLEMENTATION_START                                \
     constexpr bool care_about_this = true;                  \
     constexpr bool is_being_checked = true;                 \
+_Pragma("clang diagnostic push")                            \
+_Pragma("clang diagnostic ignored \"-Wshadow\"")            \
     constexpr bool in_preconditions = false;                \
+_Pragma("clang diagnostic pop")                             \
     auto [function_name, function_call] = get_call_uuid(loc)
 
 
@@ -133,8 +138,7 @@ bool verify_interface() {
         std::println("------");
         std::println("Going to try path: {}", c.values);
 
-        auto res = Foo::check(c);
-        if (res) {
+        if (auto res = Foo::check(c)) {
             std::println("Passed path: {}", c.values);
             found_successful_case = true;
         } else {
