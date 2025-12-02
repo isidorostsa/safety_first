@@ -33,7 +33,7 @@
 
 #define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, ...)\
     auto temp_var_name = foo::interface<RESPONSIBLE, false                 \
-        >(c, {APPLY(MAKE_R_COPY, __VA_ARGS__)});                    \
+        >(c, {__VA_ARGS__});                    \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
     }                                                               \
@@ -44,7 +44,7 @@
     CALL_INTERFACE_IMPL(type, var_name, foo,                \
     JOIN(__call_interface_temp_, __COUNTER__), __VA_ARGS__)
 
-#define IMPLEMENTATION                                      \
+#define CALL_IMPLEMENTATION                                      \
 _Pragma("clang diagnostic push")                            \
 _Pragma("clang diagnostic ignored \"-Wshadow\"")            \
     constexpr bool in_preconditions = false;                \
@@ -95,6 +95,20 @@ _Pragma("clang diagnostic pop")                             \
     }                                                       \
     (void)0
 
+// primitive needed to avoid recursion when comparing booleans
+#define CLAIM_EQUAL_BOOL(r1, r2)                            \
+    DISCERN(r1);                                            \
+    DISCERN(r2);                                            \
+    if(not c.claim_equal_bool<RESPONSIBLE>(r1, r2)) {       \
+        if constexpr (RESPONSIBLE) {                        \
+            return std::unexpected(erroneous_branch_t{});   \
+        } else {                                            \
+            return std::unexpected(impossible_branch_t{});  \
+        }                                                   \
+    }                                                       \
+    (void)0
+
+
 #define INTERFACE_START                                         \
     static_assert(in_preconditions);                            \
     static_assert(!is_being_checked || care_about_this);        \
@@ -109,10 +123,25 @@ _Pragma("clang diagnostic ignored \"-Wshadow\"")            \
 _Pragma("clang diagnostic pop")                             \
     auto [function_name, function_call] = get_call_uuid(loc)
 
+#define TURN_TO_R(...) r&
 
 #define RETURN_RESULT                   \
     static_assert(!in_preconditions);   \
     return std::move(result)
+
+#define INTERFACE(...) \
+    template<bool care_about_this, bool is_being_checked = false>           \
+    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<APPLY(TURN_TO_R, __VA_ARGS__)> args)   { \
+    INTERFACE_START;\
+    auto&& [__VA_ARGS__] = args;
+
+#define IMPLEMENTATION(...) \
+    constexpr static std::source_location loc = std::source_location::current();\
+    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<APPLY(TURN_TO_R, __VA_ARGS__)> args) {\
+        IMPLEMENTATION_START;\
+        auto&& [__VA_ARGS__] = args;
+
+
 
 constexpr bool in_preconditions = true;
 struct erroneous_branch_t {};

@@ -39,7 +39,7 @@ struct _and {
 
         CALL_INTERFACE(int, my, _some, a, b);
 
-        IMPLEMENTATION;
+        CALL_IMPLEMENTATION;
 
         DISCERN(result);
 

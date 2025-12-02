@@ -10,7 +10,6 @@
 class Ledger {
 
     // Ledgers internal to this case
-    std::map<uuid_t, std::set<uuid_t> > ledger_stability;
     std::map<uuid_t, std::set<uuid_t> > ledger_substitutability;
 
 public:
@@ -28,7 +27,8 @@ private:
     // map ( function name id, map ( function call id, { vector( preconditions ), vector ( postconditions ) } ) )
     std::map<uuid_t, std::map<uuid_t, discerned_io> > ledger_repeatability;
 
-    static inline void dfs(uuid_t const uuid, std::set<uuid_t>& reachables, std::map<uuid_t, std::set<uuid_t>> const& ledger_value) {
+    static void dfs(uuid_t const uuid, std::set<uuid_t> &reachables,
+                    std::map<uuid_t, std::set<uuid_t> > const &ledger_value) {
         if (reachables.contains(uuid)) return;
 
         reachables.insert(uuid);
@@ -40,15 +40,13 @@ private:
         }
     }
 
-
-
 public:
     void track_substitutability(uuid_t const t) {
         ledger_substitutability.try_emplace(t);
     }
 
 
-    void set_substitutable(uuid_t t1, uuid_t t2) {
+    void set_substitutable(const uuid_t t1, const uuid_t t2) {
         if (not ledger_substitutability.contains(t1) or not ledger_substitutability.contains(t2)) {
             throw;
         }
@@ -68,13 +66,12 @@ public:
     }
 
     void clear_ledgers() {
-        ledger_stability.clear();
         ledger_substitutability.clear();
         ledger_repeatability.clear();
     }
 
 private:
-    bool are_calls_equivalent(std::vector<discerned_point> const &p1, std::vector<discerned_point> const &p2) {
+    bool are_calls_equivalent(std::vector<discerned_point> const &p1, std::vector<discerned_point> const &p2) const {
         if (p1.size() != p2.size()) {
             return false;
         }
@@ -102,28 +99,34 @@ private:
         return result;
     }
 
-
 public:
     void normalize_outputs_around(const uuid_t function_name, const uuid_t function_call) {
-        auto current_table = ledger_repeatability[function_name][function_call];
-        auto inputs = current_table.inputs;
-        auto outputs_so_far = current_table.outputs;
+        auto const &function_table = ledger_repeatability.at(function_name);
+        auto const &current_table = function_table.at(function_call);
+        auto const &inputs = current_table.inputs;
+        auto const &outputs_so_far = current_table.outputs;
 
-        std::set<uuid_t> equivalent_calls = get_equivalent_calls(function_name, function_call);
+        std::set<uuid_t> const equivalent_calls = get_equivalent_calls(function_name, function_call);
 
         for (uuid_t const eq_call: equivalent_calls) {
-            auto const& eq_outputs = ledger_repeatability[function_name][eq_call].outputs;
+            auto const &eq_outputs = function_table.at(eq_call).outputs;
 
             if (outputs_so_far.size() <= eq_outputs.size()) {
-                auto& current_last_discerned = outputs_so_far.back();
-                auto& eq_discerned_element = eq_outputs[outputs_so_far.size() - 1];
+                auto const &current_last_discerned = outputs_so_far.back();
+                auto const &eq_discerned_element = eq_outputs[outputs_so_far.size() - 1];
 
-                if (current_last_discerned.point != eq_discerned_element.point) {
-                    std::println("Point mismatch: {} != {}", current_last_discerned.point, eq_discerned_element.point);
-                }
                 assert(current_last_discerned.point == eq_discerned_element.point);
                 set_substitutable(current_last_discerned.value, eq_discerned_element.value);
             }
+
+            assert(
+                std::ranges::all_of(
+                    std::views::zip(outputs_so_far, eq_outputs),
+                    [](auto const& p) {
+                    return p.first.point == p.second.point;
+                    }
+                )
+            );
 
             for (int i = 0; i < std::min(outputs_so_far.size(), eq_outputs.size()); ++i) {
                 assert(outputs_so_far[i].point == eq_outputs[i].point);
@@ -133,7 +136,7 @@ public:
 
     template<bool in_preconditions>
     void track_repeatability(const r &t, const uuid_t function_name, const uuid_t function_call,
-                                    const uuid_t code_point) {
+                             const uuid_t code_point) {
         if constexpr (in_preconditions) {
             ledger_repeatability[function_name][function_call].inputs.push_back({
                 .value = t.get_uuid(), .point = code_point
@@ -144,20 +147,18 @@ public:
             });
         }
     }
-
 };
 
 template<>
 struct std::formatter<Ledger::discerned_point> : std::formatter<std::string> {
-    auto format(const Ledger::discerned_point& s, auto& ctx) const {
+    auto format(const Ledger::discerned_point &s, auto &ctx) const {
         return std::format_to(ctx.out(), "discerned_point({}, {})", s.point, s.value);
     }
 };
 
 template<>
 struct std::formatter<Ledger::discerned_io> : std::formatter<std::string> {
-    auto format(const Ledger::discerned_io& s, auto& ctx) const {
+    auto format(const Ledger::discerned_io &s, auto &ctx) const {
         return std::format_to(ctx.out(), "discerned_io({}, {})", s.inputs, s.outputs);
     }
 };
-

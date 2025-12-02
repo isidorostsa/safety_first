@@ -14,15 +14,16 @@
 struct r {
     friend struct Case;
 protected:
-    uuid_t uuid;
+    std::optional<uuid_t> uuid;
+
 public:
     constexpr uuid_t get_uuid() const {
-        assert(uuid != -1);
-        return uuid;
+        assert(uuid);
+        return *uuid;
     }
 
     constexpr r(r&& other) noexcept : uuid(other.get_uuid()) {
-        other.uuid = -1;
+        other.uuid.reset();
     }
 
 private:

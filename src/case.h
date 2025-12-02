@@ -36,6 +36,7 @@ struct Case {
     // True and false nodes for this case
     static constexpr r _true = r(0);
     static constexpr r _false = r(1);
+    static constexpr r _void = r(2);
     static constexpr std::array both_true_and_false = {_true.get_uuid(), _false.get_uuid()};
 
     explicit Case() : values(), current(values.begin()) {
@@ -85,6 +86,37 @@ public:
 
             return not_false;
         }
+    }
+
+    template<bool responsible>
+    bool claim_equal_bool(r const& r1, r const& r2) {
+
+        if (ledger.is_substitutable_with(r1.get_uuid(), r2.get_uuid())) {
+            return true;
+        }
+
+        // They may be substitutable and we just haven't realized
+        auto d1 = decided_direction(r1);
+        auto d2 = decided_direction(r2);
+
+        if constexpr (responsible) {
+            // If either is unknown we can't show equality
+            if (!d1 or !d2) { return false; }
+            if (*d1 != *d2) { return false; }
+        } else {
+            // We don't have to show equality, just that there is no conflict
+            if (d1 && d2) {
+                if (*d1 != *d2) {
+                    return false;
+                }
+            }
+        }
+
+        bool const valid = substitutable(r1, r2);
+        // If this is not valid we should have returned false already
+        assert(valid);
+
+        return true;
     }
 
 
