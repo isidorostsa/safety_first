@@ -5,9 +5,7 @@
 
 struct _equals {
     struct _primitive {
-        IMPLEMENTATION(r1, r2)
-            return c.make_r();
-        }
+        PRIMITIVE_IMPLEMENTATION(r1, r2)
 
         INTERFACE(r1, r2)
             DISCERN(r1);
@@ -43,10 +41,5 @@ struct _equals {
         RETURN_RESULT;
     }
 
-    static auto check(Case &c) {
-        std::tuple<r, r> args = {c.make_r(), c.make_r()};
-        std::tuple<r&, r&> args_ref = {std::get<0>(args), std::get<1>(args)};
-
-        return interface<true, true>(c, args_ref);
-    }
+    CHECK(r1, r2)
 };

@@ -35,12 +35,7 @@ struct foo {
         RETURN_RESULT;
     }
 
-    static auto check(Case &c) {
-        std::tuple<r, r, r, r> args = {c.make_r(), c.make_r(), c.make_r(), c.make_r()};
-        std::tuple<r&, r&, r&, r&> args_ref = {std::get<0>(args), std::get<1>(args), std::get<2>(args), std::get<3>(args)};
-
-        return interface<true, true>(c, args_ref);
-    }
+    CHECK(r1, r2, r3, r4)
 };
 
 int main() {

@@ -16,12 +16,7 @@ struct _test_equal {
         RETURN_RESULT;
     }
 
-    static auto check(Case &c) {
-        std::tuple<r, r> args = {c.make_r(), c.make_r()};
-        std::tuple<r&, r&> args_ref = {std::get<0>(args), std::get<1>(args)};
-
-        return interface<true, true>(c, args_ref);
-    }
+    CHECK(r1, r2)
 };
 
 struct _test_not {
@@ -37,12 +32,7 @@ struct _test_not {
         RETURN_RESULT;
     }
 
-    static auto check(Case &c) {
-        std::tuple<r> args = {c.make_r()};
-        std::tuple<r&> args_ref = {std::get<0>(args)};
-
-        return interface<true, true>(c, args_ref);
-    }
+    CHECK(r1)
 };
 int main () {
     verify_interface<_test_equal>();

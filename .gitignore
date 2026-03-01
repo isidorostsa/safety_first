@@ -42,3 +42,10 @@
 
 # Clion files
 .idea/**
+
+# Build artifacts
+build/*
+
+# Claude
+CLAUDE.md
+

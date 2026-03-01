@@ -49,10 +49,5 @@ struct _not {
         RETURN_RESULT;
     }
 
-    static auto check(Case &c) {
-        std::tuple<r> args = {c.make_r()};
-        std::tuple<r&> args_ref = {std::get<0>(args)};
-
-        return interface<true, true>(c, args_ref);
-    }
+    CHECK(r1)
 };

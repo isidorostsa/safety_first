@@ -21,6 +21,20 @@
 #define APPLY(M, ...) JOIN(APPLY, NUM_ARGS(__VA_ARGS__))(M, __VA_ARGS__)
 
 #define MAKE_R_COPY(x) c.make_r_copy(x)
+#define MAKE_R_IGNORE(x) c.make_r()
+
+#define PRIMITIVE_IMPLEMENTATION(...) \
+    IMPLEMENTATION(__VA_ARGS__) \
+        return c.make_r(); \
+    }
+
+#define CHECK(...) \
+    static auto check(Case& c) { \
+        auto args = std::make_tuple(APPLY(MAKE_R_IGNORE, __VA_ARGS__)); \
+        return std::apply([&](auto&... refs) { \
+            return interface<true, true>(c, std::tie(refs...)); \
+        }, args); \
+    }
 
 #define IF(x)                                                           \
     if(                                                                 \
