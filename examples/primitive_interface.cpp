@@ -1,46 +1,18 @@
-//
-// Created by ros on 9/20/25.
-//
 #include "proof_checker_defs.h"
-#include <tuple>
+#include "equal.hpp"
+#include "not.hpp"
 
-struct _equals {
-    struct _primitive {
-        IMPLEMENTATION(r1, r2)
-            return c.make_r();
-        }
 
-        INTERFACE(r1, r2)
-            DISCERN(r1);
-            DISCERN(r2);
-            CALL_IMPLEMENTATION;
-            DISCERN(result);
-            RETURN_RESULT;
-        }
-    };
-
+struct _test_equal {
     IMPLEMENTATION(r1, r2)
-        CALL_INTERFACE(bool, result, _primitive, r1, r2);
-        RETURN_RESULT;
+        RETURN_VOID;
     }
 
     INTERFACE(r1, r2)
-        DISCERN(r1);
-        DISCERN(r2);
-
-        CALL_INTERFACE(bool, known_prim_result, _primitive, r1, r1);
-        CLAIM(known_prim_result);
-
+        SUBSTITUTABLE(r1, r2);
         CALL_IMPLEMENTATION;
-        DISCERN(result);
-
-        CALL_INTERFACE(bool, prim_result, _primitive, r1, r2);
-        CLAIM_EQUAL_BOOL(prim_result, result);
-
-        IF (result) {
-            SUBSTITUTABLE(r1, r2);
-        }
-
+        CALL_INTERFACE(bool, same, _equals, r1, r2);
+        CLAIM(same);
         RETURN_RESULT;
     }
 
@@ -52,6 +24,27 @@ struct _equals {
     }
 };
 
+struct _test_not {
+    IMPLEMENTATION(r1)
+        RETURN_VOID;
+    }
+
+    INTERFACE( r1)
+        CLAIM(r1);
+        CALL_IMPLEMENTATION;
+        CALL_INTERFACE(bool, not_r1, _not, r1);
+        CLAIM_FALSE(not_r1);
+        RETURN_RESULT;
+    }
+
+    static auto check(Case &c) {
+        std::tuple<r> args = {c.make_r()};
+        std::tuple<r&> args_ref = {std::get<0>(args)};
+
+        return interface<true, true>(c, args_ref);
+    }
+};
 int main () {
-    verify_interface<_equals>();
+    verify_interface<_test_equal>();
+    verify_interface<_test_not>();
 }

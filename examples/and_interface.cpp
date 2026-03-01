@@ -2,59 +2,42 @@
 // Created by ros on 10/7/25.
 //
 
-#include <expected>
-
 #include "proof_checker_defs.h"
+#include "equal.hpp"
 
-struct _some {
-    template<bool care_about_this = true, bool is_being_checked = false>
-    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<r, r> args) {
-        return c.make_r();
-    }
-};
 
 struct _and {
-    constexpr static std::source_location loc = std::source_location::current();
-
-    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<r, r> const& args) {
-        IMPLEMENTATION_START;
-
-        auto&& [a, b] = args;
-
-        IF(a) {
-            IF(b) {
+    IMPLEMENTATION(r1, r2)
+        IF(r1) {
+            IF(r2) {
                 return c.make_r_copy(Case::_true);
             }
         }
         return c.make_r_copy(Case::_false);
     }
 
-    template<bool care_about_this, bool is_being_checked = false>
-    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<r, r> args) {
-        INTERFACE_START;
-        auto&& [a, b] = args;
-
-        DISCERN(a);
-        DISCERN(b);
-
-        CALL_INTERFACE(int, my, _some, a, b);
+    INTERFACE(r1, r2)
+        DISCERN(r1);
+        DISCERN(r2);
 
         CALL_IMPLEMENTATION;
 
         DISCERN(result);
 
         IF(result) {
-            CLAIM(a);
-            CLAIM(b);
+            CLAIM(r1);
+            CLAIM(r2);
         }
 
         RETURN_RESULT;
     }
 
-    static auto check(Case& c) {
-        return interface<true, true>(c, {c.make_r(), c.make_r()});
-    }
+    static auto check(Case &c) {
+        std::tuple<r, r> args = {c.make_r(), c.make_r()};
+        std::tuple<r&, r&> args_ref = {std::get<0>(args), std::get<1>(args)};
 
+        return interface<true, true>(c, args_ref);
+    }
 };
 
 int main() {

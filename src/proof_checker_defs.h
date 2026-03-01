@@ -8,9 +8,10 @@
 #define JOIN_IMPL(x, y) x##y
 #define JOIN(x, y) JOIN_IMPL(x, y)
 
-#define NUM_ARGS_IMPL(_1, _2, _3, _4, _5, COUNT, ...) COUNT
-#define NUM_ARGS(...) NUM_ARGS_IMPL(__VA_ARGS__, 5, 4, 3, 2, 1)
+#define NUM_ARGS_IMPL(_0,_1,_2,_3,_4,_5,COUNT,...) COUNT
+#define NUM_ARGS(...) NUM_ARGS_IMPL(_, ##__VA_ARGS__, 5,4,3,2,1,0)
 
+#define APPLY0(M, x)
 #define APPLY1(M, x) M(x)
 #define APPLY2(M, x, ...) M(x), APPLY1(M, __VA_ARGS__)
 #define APPLY3(M, x, ...) M(x), APPLY2(M, __VA_ARGS__)
@@ -75,8 +76,10 @@ _Pragma("clang diagnostic pop")                             \
         function_name, function_call)
 
 #define SUBSTITUTABLE(x, y)                                 \
+    c.ledger.track_substitutability(x.get_uuid());          \
+    c.ledger.track_substitutability(y.get_uuid());          \
     if(not c.substitutable(x, y)) {                         \
-        if constexpr (RESPONSIBLE) {                               \
+        if constexpr (RESPONSIBLE) {                        \
             return std::unexpected(erroneous_branch_t{});   \
         } else {                                            \
             return std::unexpected(impossible_branch_t{});  \
@@ -87,6 +90,17 @@ _Pragma("clang diagnostic pop")                             \
 #define CLAIM(x)                                            \
     DISCERN(x);                                             \
     if(not c.claim<RESPONSIBLE>(x)) {                       \
+        if constexpr (RESPONSIBLE) {                        \
+            return std::unexpected(erroneous_branch_t{});   \
+        } else {                                            \
+            return std::unexpected(impossible_branch_t{});  \
+        }                                                   \
+    }                                                       \
+    (void)0
+
+#define CLAIM_FALSE(x)                                      \
+    DISCERN(x);                                             \
+    if(not c.claim_false<RESPONSIBLE>(x)) {                 \
         if constexpr (RESPONSIBLE) {                        \
             return std::unexpected(erroneous_branch_t{});   \
         } else {                                            \
@@ -123,25 +137,29 @@ _Pragma("clang diagnostic ignored \"-Wshadow\"")            \
 _Pragma("clang diagnostic pop")                             \
     auto [function_name, function_call] = get_call_uuid(loc)
 
-#define TURN_TO_R(...) r&
+#define TURN_TO_R(...) r
+#define TURN_TO_R_ref(...) r&
 
 #define RETURN_RESULT                   \
     static_assert(!in_preconditions);   \
     return std::move(result)
 
+#define RETURN_VOID                     \
+    static_assert(!in_preconditions);   \
+    return c.make_r_copy(Case::_void)
+
+
 #define INTERFACE(...) \
     template<bool care_about_this, bool is_being_checked = false>           \
-    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<APPLY(TURN_TO_R, __VA_ARGS__)> args)   { \
+    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<APPLY(TURN_TO_R_ref, __VA_ARGS__)> args)   { \
     INTERFACE_START;\
     auto&& [__VA_ARGS__] = args;
 
 #define IMPLEMENTATION(...) \
     constexpr static std::source_location loc = std::source_location::current();\
-    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<APPLY(TURN_TO_R, __VA_ARGS__)> args) {\
+    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<APPLY(TURN_TO_R_ref, __VA_ARGS__)> args) {\
         IMPLEMENTATION_START;\
         auto&& [__VA_ARGS__] = args;
-
-
 
 constexpr bool in_preconditions = true;
 struct erroneous_branch_t {};

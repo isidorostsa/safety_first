@@ -1,4 +1,5 @@
 #include "proof_checker_defs.h"
+#include "equal.hpp"
 
 struct foo {
     IMPLEMENTATION(r1, r2, r3, r4)

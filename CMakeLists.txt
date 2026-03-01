@@ -14,5 +14,7 @@ include_directories(src)
 
 # Build examples
 add_executable(and_interface examples/and_interface.cpp)
-add_executable(primitive_interface examples/primitive_interface.cpp)
+add_executable(equal examples/equal.cpp)
+add_executable(primitive_interface examples/primitive_interface.cpp examples/equal.hpp)
 add_executable(test_repeatability examples/test_repeatability.cpp)
+add_executable(not examples/not.cpp)

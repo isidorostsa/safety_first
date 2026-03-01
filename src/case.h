@@ -42,6 +42,7 @@ struct Case {
     explicit Case() : values(), current(values.begin()) {
         ledger.track_substitutability(_true.get_uuid());
         ledger.track_substitutability(_false.get_uuid());
+        ledger.track_substitutability(_void.get_uuid());
     }
 
 private:
@@ -50,7 +51,7 @@ private:
     }
 
 
-    std::optional<bool> decided_direction(r const &g) const {
+    [[nodiscard]] std::optional<bool> decided_direction(r const &g) const {
         auto const reachables = ledger.reachable_nodes_from(g.get_uuid());
         if (reachables.contains(_true.get_uuid()) and reachables.contains(_false.get_uuid())) {
             throw;
@@ -87,6 +88,25 @@ public:
             return not_false;
         }
     }
+
+    template<bool responsible>
+    bool claim_false(r const &t) {
+        if constexpr (responsible) {
+            return ledger.is_substitutable_with(t.get_uuid(), _false.get_uuid());
+        } else { // Other neighborhood responsible for this
+            bool const not_true = not ledger.is_substitutable_with(t.get_uuid(), _true.get_uuid());
+
+            if (not_true) {
+                // This is definitely not sub with false given the condition,
+                // so it should be valid to set to _true
+                bool const valid = substitutable(t, _false);
+                assert(valid);
+            }
+
+            return not_true;
+        }
+    }
+
 
     template<bool responsible>
     bool claim_equal_bool(r const& r1, r const& r2) {
@@ -198,6 +218,7 @@ public:
         ledger.clear_ledgers();
         ledger.track_substitutability(_true.get_uuid());
         ledger.track_substitutability(_false.get_uuid());
+        ledger.track_substitutability(_void.get_uuid());
         return increment();
     }
 };
