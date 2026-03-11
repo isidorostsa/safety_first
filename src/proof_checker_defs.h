@@ -46,6 +46,7 @@
     ||                                                              \
     (!in_preconditions && (care_about_this && is_being_checked))
 
+// NOTE: the `type` argument is currently ignored in CALL_INTERFACE macros
 #define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, ...)\
     auto temp_var_name = foo::interface<RESPONSIBLE, false                 \
         >(c, {__VA_ARGS__});                    \
@@ -58,6 +59,27 @@
 #define CALL_INTERFACE(type, var_name, foo, ...)            \
     CALL_INTERFACE_IMPL(type, var_name, foo,                \
     JOIN(__call_interface_temp_, __COUNTER__), __VA_ARGS__)
+
+#define CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo, temp_var_name, args_tuple)\
+    auto temp_var_name = foo::interface<RESPONSIBLE, false          \
+        >(c, args_tuple);                                          \
+    if (not temp_var_name) {                                        \
+        return temp_var_name;                                       \
+    }                                                               \
+    r var_name = std::move(temp_var_name.value());                  \
+    (void)0
+
+#define CALL_INTERFACE_TUPLE(type, var_name, foo, args_tuple)  \
+    CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo,             \
+    JOIN(__call_interface_temp_, __COUNTER__), args_tuple)
+
+#define CALL_PRIMITIVE_INTERFACE                                         \
+    CALL_IMPLEMENTATION;                                                    \
+    CALL_INTERFACE_TUPLE(bool, primitive_result, _primitive, args);  \
+    SUBSTITUTABLE(result, primitive_result)
+
+#define CALL_PRIMITIVE_INTERFACE_ON(var_name, ...)              \
+    CALL_INTERFACE(bool, var_name, _primitive, __VA_ARGS__)
 
 #define CALL_IMPLEMENTATION                                      \
 _Pragma("clang diagnostic push")                            \
@@ -154,6 +176,13 @@ _Pragma("clang diagnostic pop")                             \
 #define TURN_TO_R(...) r
 #define TURN_TO_R_ref(...) r&
 
+#define KILL_BRANCH                                         \
+    if constexpr (RESPONSIBLE) {                            \
+        return std::unexpected(erroneous_branch_t{});       \
+    } else {                                                \
+        return std::unexpected(impossible_branch_t{});      \
+    }
+
 #define RETURN_RESULT                   \
     static_assert(!in_preconditions);   \
     return std::move(result)
@@ -175,11 +204,25 @@ _Pragma("clang diagnostic pop")                             \
         IMPLEMENTATION_START;\
         auto&& [__VA_ARGS__] = args;
 
+#define INTERFACE0() \
+    template<bool care_about_this, bool is_being_checked = false>                        \
+    static propagate_errors_if_t<care_about_this> interface(Case& c, std::tuple<> args) { \
+    INTERFACE_START;
+
+#define IMPLEMENTATION0() \
+    constexpr static std::source_location loc = std::source_location::current();         \
+    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<> args) {      \
+        IMPLEMENTATION_START;
+
 constexpr bool in_preconditions = true;
-struct erroneous_branch_t {};
+struct erroneous_branch_t {
+    std::source_location loc;
+    erroneous_branch_t(std::source_location loc = std::source_location::current()) : loc(loc) {}
+};
 struct impossible_branch_t {
-    impossible_branch_t() = default;
-    impossible_branch_t(std::variant<impossible_branch_t, erroneous_branch_t> const&) {};
+    std::source_location loc;
+    impossible_branch_t(std::source_location loc = std::source_location::current()) : loc(loc) {}
+    impossible_branch_t(std::variant<impossible_branch_t, erroneous_branch_t> const&) : loc() {};
 };
 
 
@@ -207,7 +250,14 @@ bool verify_interface() {
             if (std::holds_alternative<impossible_branch_t>(err)) {
                 std::println("Pruned path: {}", c.values);
             } else {
-                std::println("Failed path: {}", c.values);
+                auto const& loc = std::get<erroneous_branch_t>(err).loc;
+                std::println("Failed path: {} (at {}:{})", c.values, loc.file_name(), loc.line());
+                std::println("  Branches:");
+                for (size_t i = 0; i < c.branch_locations.size(); ++i) {
+                    auto const& bl = c.branch_locations[i];
+                    std::println("    [{}] -\t{}\t- {}:{}", i, c.values[i], bl.file_name(), bl.line());
+                }
+                std::println("    [x] -\tFAILED\t- {}:{}", loc.file_name(), loc.line());
                 return false;
             }
         }

@@ -17,7 +17,7 @@ struct _equals {
     };
 
     IMPLEMENTATION(r1, r2)
-        CALL_INTERFACE(bool, result, _primitive, r1, r2);
+        CALL_PRIMITIVE_INTERFACE_ON(result, r1, r2);
         RETURN_RESULT;
     }
 
@@ -29,10 +29,10 @@ struct _equals {
 
         DISCERN(result);
 
-        CALL_INTERFACE(bool, known_prim_result, _primitive, r1, r1);
+        CALL_PRIMITIVE_INTERFACE_ON(known_prim_result, r1, r1);
         CLAIM(known_prim_result);
 
-        CALL_INTERFACE(bool, prim_result, _primitive, r1, r2);
+        CALL_PRIMITIVE_INTERFACE_ON(prim_result, r1, r2);
         CLAIM_EQUAL_BOOL(prim_result, result);
 
         IF (result) {

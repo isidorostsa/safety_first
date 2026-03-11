@@ -1,16 +1,13 @@
 #pragma once
 
 #include "proof_checker_defs.h"
+#include "primitives/bool.hpp"
 #include <tuple>
 
 struct _not {
     struct _primitive {
         IMPLEMENTATION(r1)
-            IF(r1) {
-                return c.make_r_copy(Case::_false);
-            } else {
-                return c.make_r_copy(Case::_true);
-            }
+            return c.make_r();
         }
 
         INTERFACE(r1)
@@ -22,29 +19,36 @@ struct _not {
     };
 
     IMPLEMENTATION(r1)
-        CALL_INTERFACE(bool, result, _primitive, r1);
+        CALL_PRIMITIVE_INTERFACE_ON(result, r1);
         RETURN_RESULT;
     }
 
     INTERFACE(r1)
         DISCERN(r1);
 
-        // temp workaround, need to figure out how to handle r constness
-        auto f = c.make_r_copy(Case::_false);
-        auto t = c.make_r_copy(Case::_true);
+        CALL_INTERFACE(bool, tt, _bool_true);
+        CALL_INTERFACE(bool, ff, _bool_false);
 
-        CALL_INTERFACE(bool, known_prim_false, _primitive, f);
-        CLAIM(known_prim_false);
+        CALL_PRIMITIVE_INTERFACE_ON(prim_not_t, tt);
+        CALL_PRIMITIVE_INTERFACE_ON(prim_not_f, ff);
 
-        CALL_INTERFACE(bool, known_prim_true, _primitive, t);
-        CLAIM_FALSE(known_prim_true);
+        CLAIM_FALSE(prim_not_t);
+        CLAIM(prim_not_f);
 
-        CALL_IMPLEMENTATION;
-        DISCERN(result);
+        CALL_PRIMITIVE_INTERFACE;
 
-        CALL_INTERFACE(bool, prim_result, _primitive, r1);
+        IF(r1) {
+            CLAIM_FALSE(result);
+        } else {
+            CLAIM(result);
+        }
 
-        CLAIM_EQUAL_BOOL(prim_result, result);
+        // result = _prim(r1) <-- V123
+        // going through prim(r1):
+        //      discerned input: r1. Never seen this. discerned output: V123, input was never seen b4, so skip.
+
+        // r1 = true
+        // what can we say about V123? How could we
 
         RETURN_RESULT;
     }

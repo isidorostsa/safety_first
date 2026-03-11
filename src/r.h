@@ -14,10 +14,10 @@
 struct r {
     friend struct Case;
 protected:
-    std::optional<uuid_t> uuid;
+    std::optional<value_uuid_t> uuid;
 
 public:
-    constexpr uuid_t get_uuid() const {
+    constexpr value_uuid_t get_uuid() const {
         assert(uuid);
         return *uuid;
     }
@@ -27,5 +27,5 @@ public:
     }
 
 private:
-    explicit constexpr r(const uuid_t _uuid = get_new_uuid()) : uuid(_uuid) {}
+    explicit constexpr r(const value_uuid_t _uuid) : uuid(_uuid) {}
 };

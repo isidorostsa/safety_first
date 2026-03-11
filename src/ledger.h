@@ -10,12 +10,12 @@
 class Ledger {
 
     // Ledgers internal to this case
-    std::map<uuid_t, std::set<uuid_t> > ledger_substitutability;
+    std::map<value_uuid_t, std::set<value_uuid_t>> ledger_substitutability;
 
 public:
     struct discerned_point {
-        uuid_t value;
-        uuid_t point;
+        value_uuid_t      value;
+        code_point_uuid_t point;
     };
 
     struct discerned_io {
@@ -24,29 +24,29 @@ public:
     };
 private:
 
-    // map ( function name id, map ( function call id, { vector( preconditions ), vector ( postconditions ) } ) )
-    std::map<uuid_t, std::map<uuid_t, discerned_io> > ledger_repeatability;
+    // map ( function_point_t, map ( function_call_uuid_t, { vector( preconditions ), vector ( postconditions ) } ) )
+    std::map<function_point_t, std::map<function_call_uuid_t, discerned_io>> ledger_repeatability;
 
-    static void dfs(uuid_t const uuid, std::set<uuid_t> &reachables,
-                    std::map<uuid_t, std::set<uuid_t> > const &ledger_value) {
+    static void dfs(value_uuid_t const uuid, std::set<value_uuid_t> &reachables,
+                    std::map<value_uuid_t, std::set<value_uuid_t>> const &ledger_value) {
         if (reachables.contains(uuid)) return;
 
         reachables.insert(uuid);
 
         if (!ledger_value.contains(uuid)) return;
 
-        for (uuid_t const other_uuid: ledger_value.at(uuid)) {
+        for (value_uuid_t const other_uuid: ledger_value.at(uuid)) {
             dfs(other_uuid, reachables, ledger_value);
         }
     }
 
 public:
-    void track_substitutability(uuid_t const t) {
+    void track_substitutability(value_uuid_t const t) {
         ledger_substitutability.try_emplace(t);
     }
 
 
-    void set_substitutable(const uuid_t t1, const uuid_t t2) {
+    void set_substitutable(const value_uuid_t t1, const value_uuid_t t2) {
         if (not ledger_substitutability.contains(t1) or not ledger_substitutability.contains(t2)) {
             throw;
         }
@@ -55,13 +55,13 @@ public:
         ledger_substitutability[t2].insert(t1);
     }
 
-    std::set<uuid_t> reachable_nodes_from(uuid_t const uuid) const {
-        std::set<uuid_t> result;
+    std::set<value_uuid_t> reachable_nodes_from(value_uuid_t const uuid) const {
+        std::set<value_uuid_t> result;
         dfs(uuid, result, ledger_substitutability);
         return result;
     }
 
-    bool is_substitutable_with(uuid_t const source, uuid_t const dest) const {
+    bool is_substitutable_with(value_uuid_t const source, value_uuid_t const dest) const {
         return reachable_nodes_from(source).contains(dest);
     }
 
@@ -83,10 +83,11 @@ private:
             });
     }
 
-    std::set<uuid_t> get_equivalent_calls(const uuid_t function_name, const uuid_t function_call) {
+    std::set<function_call_uuid_t> get_equivalent_calls(const function_point_t& function_name,
+                                                         const function_call_uuid_t function_call) {
         auto const &current_inputs = ledger_repeatability[function_name][function_call].inputs;
 
-        std::set<uuid_t> result;
+        std::set<function_call_uuid_t> result;
 
         for (auto &[other_function_call, other_table]: ledger_repeatability[function_name]) {
             if (other_function_call == function_call) continue;
@@ -100,15 +101,16 @@ private:
     }
 
 public:
-    void normalize_outputs_around(const uuid_t function_name, const uuid_t function_call) {
+    void normalize_outputs_around(const function_point_t& function_name,
+                                  const function_call_uuid_t function_call) {
         auto const &function_table = ledger_repeatability.at(function_name);
         auto const &current_table = function_table.at(function_call);
         auto const &inputs = current_table.inputs;
         auto const &outputs_so_far = current_table.outputs;
 
-        std::set<uuid_t> const equivalent_calls = get_equivalent_calls(function_name, function_call);
+        std::set<function_call_uuid_t> const equivalent_calls = get_equivalent_calls(function_name, function_call);
 
-        for (uuid_t const eq_call: equivalent_calls) {
+        for (function_call_uuid_t const eq_call: equivalent_calls) {
             auto const &eq_outputs = function_table.at(eq_call).outputs;
 
             if (outputs_so_far.size() <= eq_outputs.size()) {
@@ -135,8 +137,9 @@ public:
     }
 
     template<bool in_preconditions>
-    void track_repeatability(const r &t, const uuid_t function_name, const uuid_t function_call,
-                             const uuid_t code_point) {
+    void track_repeatability(const r &t, const function_point_t& function_name,
+                             const function_call_uuid_t function_call,
+                             const code_point_uuid_t code_point) {
         if constexpr (in_preconditions) {
             ledger_repeatability[function_name][function_call].inputs.push_back({
                 .value = t.get_uuid(), .point = code_point
@@ -146,6 +149,13 @@ public:
                 .value = t.get_uuid(), .point = code_point
             });
         }
+    }
+};
+
+template<uuid_kind K>
+struct std::formatter<typed_uuid<K>> : std::formatter<uint32_t> {
+    auto format(const typed_uuid<K> &u, auto &ctx) const {
+        return std::formatter<uint32_t>::format(u.raw, ctx);
     }
 };
 

@@ -32,11 +32,12 @@ struct Case {
     std::vector<direction> values;
     std::vector<direction>::iterator current;
     Ledger ledger;
+    std::vector<std::source_location> branch_locations;
 
     // True and false nodes for this case
-    static constexpr r _true = r(0);
-    static constexpr r _false = r(1);
-    static constexpr r _void = r(2);
+    static constexpr r _true  = r(value_uuid_t{0});
+    static constexpr r _false = r(value_uuid_t{1});
+    static constexpr r _void  = r(value_uuid_t{2});
     static constexpr std::array both_true_and_false = {_true.get_uuid(), _false.get_uuid()};
 
     explicit Case() : values(), current(values.begin()) {
@@ -141,8 +142,8 @@ public:
 
 
     template<bool in_preconditions>
-    void discern(r const &d, uuid_t function_name, uuid_t function_call,
-                 uuid_t code_point = get_code_point_uuid()) {
+    void discern(r const &d, function_point_t const& function_name, function_call_uuid_t function_call,
+                 code_point_uuid_t code_point = get_code_point_uuid()) {
         ledger.track_substitutability(d.get_uuid());
         ledger.track_repeatability<in_preconditions>(d, function_name, function_call, code_point);
         if constexpr (!in_preconditions) {
@@ -150,32 +151,29 @@ public:
         }
     }
 
-    r make_r(const uuid_t _uuid = get_new_uuid()) {
+    r make_r(const value_uuid_t _uuid = get_new_uuid()) {
         r result(_uuid);
         ledger.track_substitutability(result.get_uuid());
         return result;
     }
 
-    r make_r_copy(r const &other, const uuid_t _uuid = get_new_uuid()) {
+    r make_r_copy(r const &other, const value_uuid_t _uuid = get_new_uuid()) {
         r result(_uuid);
         ledger.track_substitutability(result.get_uuid());
         ledger.set_substitutable(result.get_uuid(), other.get_uuid());
         return result;
     }
 
-    bool next(r const &guard) {
+    bool next(r const &guard, std::source_location loc = std::source_location::current()) {
         if (current == values.end()) {
             expand(guard);
         }
+
         bool const dir = (*(current++) == True);
 
-        if (dir) {
-            substitutable(guard, _true);
-        } else {
-            substitutable(guard, _false);
-        }
+        substitutable(guard, dir ? _true : _false);
 
-        std::println("dir: {}", dir);
+        branch_locations.push_back(loc);
 
         return dir;
     }
@@ -219,6 +217,7 @@ public:
         ledger.track_substitutability(_true.get_uuid());
         ledger.track_substitutability(_false.get_uuid());
         ledger.track_substitutability(_void.get_uuid());
+        branch_locations.clear();
         return increment();
     }
 };
