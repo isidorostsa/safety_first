@@ -32,8 +32,8 @@ struct _not {
         CALL_PRIMITIVE_INTERFACE_ON(prim_not_t, tt);
         CALL_PRIMITIVE_INTERFACE_ON(prim_not_f, ff);
 
-        CLAIM_FALSE(prim_not_t);
-        CLAIM(prim_not_f);
+        GIVEN_FALSE(prim_not_t);
+        GIVEN(prim_not_f);
 
         CALL_PRIMITIVE_INTERFACE;
 

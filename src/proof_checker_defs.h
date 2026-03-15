@@ -145,6 +145,22 @@ _Pragma("clang diagnostic pop")                             \
     }                                                       \
     (void)0
 
+// Never-responsible claims — temporary stand-in for a proper
+// thing (open_questions/primitive_behavioral_specs.md)
+#define GIVEN(x)                                            \
+    DISCERN(x);                                             \
+    if(not c.claim<false>(x)) {                             \
+        return std::unexpected(impossible_branch_t{});       \
+    }                                                       \
+    (void)0
+
+#define GIVEN_FALSE(x)                                      \
+    DISCERN(x);                                             \
+    if(not c.claim_false<false>(x)) {                       \
+        return std::unexpected(impossible_branch_t{});       \
+    }                                                       \
+    (void)0
+
 // primitive needed to avoid recursion when comparing booleans
 #define CLAIM_EQUAL_BOOL(r1, r2)                            \
     DISCERN(r1);                                            \
