@@ -38,27 +38,27 @@ struct Case {
     static constexpr r _true  = r(value_uuid_t{0});
     static constexpr r _false = r(value_uuid_t{1});
     static constexpr r _void  = r(value_uuid_t{2});
-    static constexpr std::array both_true_and_false = {_true.get_uuid(), _false.get_uuid()};
 
     explicit Case() : values(), current(values.begin()) {
-        ledger.track_substitutability(_true.get_uuid());
-        ledger.track_substitutability(_false.get_uuid());
-        ledger.track_substitutability(_void.get_uuid());
+        ledger.track(_true.get_uuid());
+        ledger.track(_false.get_uuid());
+        ledger.track(_void.get_uuid());
     }
 
 private:
     void track_variable(r const &t) {
-        ledger.track_substitutability(t.get_uuid());
+        ledger.track(t.get_uuid());
     }
 
 
-    [[nodiscard]] std::optional<bool> decided_direction(r const &g) const {
-        auto const reachables = ledger.reachable_nodes_from(g.get_uuid());
-        if (reachables.contains(_true.get_uuid()) and reachables.contains(_false.get_uuid())) {
+    [[nodiscard]] std::optional<bool> decided_direction(r const &g) {
+        bool eq_true = ledger.is_substitutable_with(g.get_uuid(), _true.get_uuid());
+        bool eq_false = ledger.is_substitutable_with(g.get_uuid(), _false.get_uuid());
+        if (eq_true && eq_false) {
             throw;
-        } else if (reachables.contains(_true.get_uuid())) {
+        } else if (eq_true) {
             return true;
-        } else if (reachables.contains(_false.get_uuid())) {
+        } else if (eq_false) {
             return false;
         }
         return std::nullopt;
@@ -69,7 +69,7 @@ public:
         ledger.set_substitutable(t1.get_uuid(), t2.get_uuid());
 
         // Make sure the new addition did not make true == false
-        return !std::ranges::includes(ledger.reachable_nodes_from(t1.get_uuid()), both_true_and_false);
+        return !ledger.is_substitutable_with(_true.get_uuid(), _false.get_uuid());
     }
 
     template<bool responsible>
@@ -142,24 +142,35 @@ public:
 
 
     template<bool in_preconditions>
-    void discern(r const &d, function_point_t const& function_name, function_call_uuid_t function_call,
-                 code_point_uuid_t code_point = get_code_point_uuid()) {
-        ledger.track_substitutability(d.get_uuid());
-        ledger.track_repeatability<in_preconditions>(d, function_name, function_call, code_point);
-        if constexpr (!in_preconditions) {
-            ledger.normalize_outputs_around(function_name, function_call);
+    void discern(r const &d, function_point_t const& function_name, function_call_uuid_t const function_call,
+                 code_point_uuid_t const code_point = get_code_point_uuid()) {
+        ledger.track(d.get_uuid());
+
+        // Map function_call_uuid_t to call_idx_t
+        auto it = call_map.find(function_call);
+        if (it == call_map.end()) {
+            // First time seeing this call — register it
+            auto idx = ledger.begin_call(function_name);
+            call_map[function_call] = idx;
+            it = call_map.find(function_call);
+        }
+
+        if constexpr (in_preconditions) {
+            ledger.record_input(it->second, d.get_uuid());
+        } else {
+            ledger.record_output(it->second, d.get_uuid());
         }
     }
 
     r make_r(const value_uuid_t _uuid = get_new_uuid()) {
         r result(_uuid);
-        ledger.track_substitutability(result.get_uuid());
+        ledger.track(result.get_uuid());
         return result;
     }
 
     r make_r_copy(r const &other, const value_uuid_t _uuid = get_new_uuid()) {
         r result(_uuid);
-        ledger.track_substitutability(result.get_uuid());
+        ledger.track(result.get_uuid());
         ledger.set_substitutable(result.get_uuid(), other.get_uuid());
         return result;
     }
@@ -179,6 +190,9 @@ public:
     }
 
 private:
+    // Map from function_call_uuid_t to call_idx_t in the ledger
+    std::map<function_call_uuid_t, call_idx_t> call_map;
+
     // If the direction is undecided, we decide false.
     void expand(r const &guard) {
         std::optional<bool> const known_dir = decided_direction(guard);
@@ -214,9 +228,12 @@ public:
 
     bool prepare_next_iteration() {
         ledger.clear_ledgers();
-        ledger.track_substitutability(_true.get_uuid());
-        ledger.track_substitutability(_false.get_uuid());
-        ledger.track_substitutability(_void.get_uuid());
+        ledger.track(_true.get_uuid());
+        ledger.track(_false.get_uuid());
+        ledger.track(_void.get_uuid());
+        call_map.clear();
+        reset_uuid_counter();
+        reset_call_uuid_counter();
         branch_locations.clear();
         return increment();
     }

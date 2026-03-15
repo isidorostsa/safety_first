@@ -4,151 +4,165 @@
 #include <set>
 #include <map>
 #include <format>
+#include <vector>
+#include <cassert>
 
 #include "uuid.h"
 
 class Ledger {
 
-    // Ledgers internal to this case
-    std::map<value_uuid_t, std::set<value_uuid_t>> ledger_substitutability;
+    // Union-find for value equivalence
+    std::vector<value_uuid_t> parent;
+
+    // Provenance: which calls produced a given value as output
+    std::vector<std::vector<call_idx_t>> produced_by;
+
+    // Flat call table
+    struct CallRecord {
+        function_point_t func;
+        std::vector<value_uuid_t> inputs;
+        std::vector<value_uuid_t> outputs;
+    };
+    std::vector<CallRecord> calls;
+    std::map<function_point_t, std::vector<call_idx_t>> calls_by_function;
 
 public:
-    struct discerned_point {
-        value_uuid_t      value;
-        code_point_uuid_t point;
-    };
+    void track(value_uuid_t const t) {
+        auto idx = t.raw;
+        if (idx < parent.size()) return; // already tracked
 
-    struct discerned_io {
-        std::vector<discerned_point> inputs;
-        std::vector<discerned_point> outputs;
-    };
+        auto old_size = parent.size();
+        parent.resize(idx + 1);
+        produced_by.resize(idx + 1);
+        // Set self-parent for all newly added entries
+        for (size_t i = old_size; i <= idx; ++i) {
+            parent[i] = value_uuid_t{static_cast<uint32_t>(i)};
+        }
+    }
+
+    value_uuid_t find(value_uuid_t t) {
+        // Ensure tracked
+        if (t.raw >= parent.size()) return t;
+
+        while (parent[t.raw] != t) {
+            // Path compression
+            parent[t.raw] = parent[parent[t.raw].raw];
+            t = parent[t.raw];
+        }
+        return t;
+    }
+
+    void union_values(value_uuid_t a, value_uuid_t b) {
+        a = find(a);
+        b = find(b);
+        if (a != b) {
+            parent[a.raw] = b;
+        }
+    }
+
 private:
+    using visited_set = std::set<std::pair<uint32_t, uint32_t>>;
 
-    // map ( function_point_t, map ( function_call_uuid_t, { vector( preconditions ), vector ( postconditions ) } ) )
-    std::map<function_point_t, std::map<function_call_uuid_t, discerned_io>> ledger_repeatability;
+    bool inputs_equivalent(CallRecord const& c1, CallRecord const& c2, visited_set& visited) {
+        if (c1.inputs.size() != c2.inputs.size()) return false;
 
-    static void dfs(value_uuid_t const uuid, std::set<value_uuid_t> &reachables,
-                    std::map<value_uuid_t, std::set<value_uuid_t>> const &ledger_value) {
-        if (reachables.contains(uuid)) return;
-
-        reachables.insert(uuid);
-
-        if (!ledger_value.contains(uuid)) return;
-
-        for (value_uuid_t const other_uuid: ledger_value.at(uuid)) {
-            dfs(other_uuid, reachables, ledger_value);
+        for (size_t i = 0; i < c1.inputs.size(); ++i) {
+            if (!propagate_provenance(c1.inputs[i], c2.inputs[i], visited))
+                return false;
         }
+        return true;
+    }
+
+    void unify_outputs(CallRecord const& c1, CallRecord const& c2) {
+        for (size_t i = 0; i < std::min(c1.outputs.size(), c2.outputs.size()); ++i) {
+            union_values(c1.outputs[i], c2.outputs[i]);
+        }
+    }
+
+    // Try to prove a ~ b by finding a call that produced one of them
+    // whose inputs match another call to the same function
+    bool try_propagate_from(value_uuid_t a, value_uuid_t b,
+                            value_uuid_t target, visited_set& visited) {
+        if (target.raw >= produced_by.size()) return false;
+
+        for (auto c2_idx : produced_by[target.raw]) {
+            auto& c2 = calls[c2_idx.raw];
+            auto it = calls_by_function.find(c2.func);
+            if (it == calls_by_function.end()) continue;
+
+            for (auto c1_idx : it->second) {
+                if (c1_idx == c2_idx) continue;
+                auto& c1 = calls[c1_idx.raw];
+
+                if (c1.outputs.size() != c2.outputs.size()) continue;
+
+                if (inputs_equivalent(c1, c2, visited)) {
+                    unify_outputs(c1, c2);
+                    if (find(a) == find(b)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Lazy provenance-based propagation
+    // When direct find(a)==find(b) fails, check if a and b were produced
+    // by calls to the same function with equivalent inputs
+    bool propagate_provenance(value_uuid_t a, value_uuid_t b, visited_set& visited) {
+        auto ra = find(a), rb = find(b);
+        if (ra == rb) return true;
+
+        auto key = std::pair{std::min(ra.raw, rb.raw), std::max(ra.raw, rb.raw)};
+        if (visited.contains(key)) return false;
+        visited.insert(key);
+
+        if (try_propagate_from(a, b, b, visited)) return true;
+        if (try_propagate_from(a, b, a, visited)) return true;
+
+        return find(a) == find(b);
     }
 
 public:
-    void track_substitutability(value_uuid_t const t) {
-        ledger_substitutability.try_emplace(t);
+    bool is_substitutable_with(value_uuid_t a, value_uuid_t b) {
+        if (find(a) == find(b)) return true;
+
+        // Try lazy provenance propagation
+        std::set<std::pair<uint32_t,uint32_t>> visited;
+        return propagate_provenance(a, b, visited);
     }
 
-
-    void set_substitutable(const value_uuid_t t1, const value_uuid_t t2) {
-        if (not ledger_substitutability.contains(t1) or not ledger_substitutability.contains(t2)) {
-            throw;
-        }
-
-        ledger_substitutability[t1].insert(t2);
-        ledger_substitutability[t2].insert(t1);
-    }
-
-    std::set<value_uuid_t> reachable_nodes_from(value_uuid_t const uuid) const {
-        std::set<value_uuid_t> result;
-        dfs(uuid, result, ledger_substitutability);
-        return result;
-    }
-
-    bool is_substitutable_with(value_uuid_t const source, value_uuid_t const dest) const {
-        return reachable_nodes_from(source).contains(dest);
+    void set_substitutable(value_uuid_t a, value_uuid_t b) {
+        if (a.raw >= parent.size()) track(a);
+        if (b.raw >= parent.size()) track(b);
+        union_values(a, b);
     }
 
     void clear_ledgers() {
-        ledger_substitutability.clear();
-        ledger_repeatability.clear();
+        parent.clear();
+        produced_by.clear();
+        calls.clear();
+        calls_by_function.clear();
     }
 
-private:
-    bool are_calls_equivalent(std::vector<discerned_point> const &p1, std::vector<discerned_point> const &p2) const {
-        if (p1.size() != p2.size()) {
-            return false;
-        }
-
-        return std::ranges::all_of(
-            std::views::zip(p1, p2),
-            [&](std::pair<discerned_point, discerned_point> const &p) {
-                return is_substitutable_with(p.first.value, p.second.value) && p.first.point == p.second.point;
-            });
+    // Call recording for repeatability
+    call_idx_t begin_call(function_point_t const& func) {
+        call_idx_t idx{static_cast<uint32_t>(calls.size())};
+        calls.push_back({func, {}, {}});
+        calls_by_function[func].push_back(idx);
+        return idx;
     }
 
-    std::set<function_call_uuid_t> get_equivalent_calls(const function_point_t& function_name,
-                                                         const function_call_uuid_t function_call) {
-        auto const &current_inputs = ledger_repeatability[function_name][function_call].inputs;
-
-        std::set<function_call_uuid_t> result;
-
-        for (auto &[other_function_call, other_table]: ledger_repeatability[function_name]) {
-            if (other_function_call == function_call) continue;
-
-            if (are_calls_equivalent(current_inputs, other_table.inputs)) {
-                result.insert(other_function_call);
-            }
-        }
-
-        return result;
+    void record_input(call_idx_t call, value_uuid_t value) {
+        calls[call.raw].inputs.push_back(value);
     }
 
-public:
-    void normalize_outputs_around(const function_point_t& function_name,
-                                  const function_call_uuid_t function_call) {
-        auto const &function_table = ledger_repeatability.at(function_name);
-        auto const &current_table = function_table.at(function_call);
-        auto const &inputs = current_table.inputs;
-        auto const &outputs_so_far = current_table.outputs;
-
-        std::set<function_call_uuid_t> const equivalent_calls = get_equivalent_calls(function_name, function_call);
-
-        for (function_call_uuid_t const eq_call: equivalent_calls) {
-            auto const &eq_outputs = function_table.at(eq_call).outputs;
-
-            if (outputs_so_far.size() <= eq_outputs.size()) {
-                auto const &current_last_discerned = outputs_so_far.back();
-                auto const &eq_discerned_element = eq_outputs[outputs_so_far.size() - 1];
-
-                assert(current_last_discerned.point == eq_discerned_element.point);
-                set_substitutable(current_last_discerned.value, eq_discerned_element.value);
-            }
-
-            assert(
-                std::ranges::all_of(
-                    std::views::zip(outputs_so_far, eq_outputs),
-                    [](auto const& p) {
-                    return p.first.point == p.second.point;
-                    }
-                )
-            );
-
-            for (int i = 0; i < std::min(outputs_so_far.size(), eq_outputs.size()); ++i) {
-                assert(outputs_so_far[i].point == eq_outputs[i].point);
-            }
+    void record_output(call_idx_t call, value_uuid_t value) {
+        calls[call.raw].outputs.push_back(value);
+        // Register provenance
+        if (value.raw >= produced_by.size()) {
+            produced_by.resize(value.raw + 1);
         }
-    }
-
-    template<bool in_preconditions>
-    void track_repeatability(const r &t, const function_point_t& function_name,
-                             const function_call_uuid_t function_call,
-                             const code_point_uuid_t code_point) {
-        if constexpr (in_preconditions) {
-            ledger_repeatability[function_name][function_call].inputs.push_back({
-                .value = t.get_uuid(), .point = code_point
-            });
-        } else {
-            ledger_repeatability[function_name][function_call].outputs.push_back({
-                .value = t.get_uuid(), .point = code_point
-            });
-        }
+        produced_by[value.raw].push_back(call);
     }
 };
 
@@ -156,19 +170,5 @@ template<uuid_kind K>
 struct std::formatter<typed_uuid<K>> : std::formatter<uint32_t> {
     auto format(const typed_uuid<K> &u, auto &ctx) const {
         return std::formatter<uint32_t>::format(u.raw, ctx);
-    }
-};
-
-template<>
-struct std::formatter<Ledger::discerned_point> : std::formatter<std::string> {
-    auto format(const Ledger::discerned_point &s, auto &ctx) const {
-        return std::format_to(ctx.out(), "discerned_point({}, {})", s.point, s.value);
-    }
-};
-
-template<>
-struct std::formatter<Ledger::discerned_io> : std::formatter<std::string> {
-    auto format(const Ledger::discerned_io &s, auto &ctx) const {
-        return std::format_to(ctx.out(), "discerned_io({}, {})", s.inputs, s.outputs);
     }
 };

@@ -112,8 +112,8 @@ _Pragma("clang diagnostic pop")                             \
         function_name, function_call)
 
 #define SUBSTITUTABLE(x, y)                                 \
-    c.ledger.track_substitutability(x.get_uuid());          \
-    c.ledger.track_substitutability(y.get_uuid());          \
+    c.ledger.track(x.get_uuid());                           \
+    c.ledger.track(y.get_uuid());                           \
     if(not c.substitutable(x, y)) {                         \
         if constexpr (RESPONSIBLE) {                        \
             return std::unexpected(erroneous_branch_t{});   \
@@ -213,6 +213,31 @@ _Pragma("clang diagnostic pop")                             \
     constexpr static std::source_location loc = std::source_location::current();         \
     static propagate_errors_if_t<true> implementation(Case& c, std::tuple<> args) {      \
         IMPLEMENTATION_START;
+
+// Test macros — eliminate boilerplate for testing function interfaces.
+// Write preconditions before CALL_IMPLEMENTATION (failures prune the path),
+// and postconditions after (failures are errors).
+//
+// Usage:
+//   TEST(test_name, r1, r2)
+//       SUBSTITUTABLE(r1, r2);       // precondition
+//       CALL_IMPLEMENTATION;
+//       CALL_INTERFACE(bool, eq, _equals, r1, r2);
+//       CLAIM(eq);                    // postcondition
+//   END_TEST(r1, r2)
+
+#define TEST(name, ...) \
+    struct name { \
+        IMPLEMENTATION(__VA_ARGS__) \
+            RETURN_VOID; \
+        } \
+        INTERFACE(__VA_ARGS__)
+
+#define END_TEST(...) \
+            RETURN_VOID; \
+        } \
+        CHECK(__VA_ARGS__) \
+    }
 
 constexpr bool in_preconditions = true;
 struct erroneous_branch_t {

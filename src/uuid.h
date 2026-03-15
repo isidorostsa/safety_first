@@ -6,7 +6,6 @@
 
 #include <array>
 #include <source_location>
-#include <random>
 #include <string_view>
 
 enum class uuid_kind : uint8_t { value, code_point, function_call };
@@ -20,6 +19,11 @@ struct typed_uuid {
 using value_uuid_t         = typed_uuid<uuid_kind::value>;
 using code_point_uuid_t    = typed_uuid<uuid_kind::code_point>;
 using function_call_uuid_t = typed_uuid<uuid_kind::function_call>;
+
+struct call_idx_t {
+    uint32_t raw;
+    auto operator<=>(const call_idx_t&) const = default;
+};
 
 struct function_point_t {
     std::string_view function_name;
@@ -59,18 +63,30 @@ constexpr code_point_uuid_t get_code_point_uuid(
     return {compose_hash(loc.file_name(), line.data(), col.data())};
 }
 
-inline uint32_t get_new_raw_uuid() noexcept {
-    thread_local std::mt19937 gen(std::random_device{}());
-    thread_local std::uniform_int_distribution<uint32_t> dist;
-    return dist(gen);
+inline uint32_t& uuid_counter() noexcept {
+    thread_local uint32_t counter = 3; // 0=_true, 1=_false, 2=_void
+    return counter;
+}
+
+inline void reset_uuid_counter() noexcept {
+    uuid_counter() = 3;
 }
 
 inline value_uuid_t get_new_uuid() noexcept {
-    return {get_new_raw_uuid()};
+    return {uuid_counter()++};
+}
+
+inline uint32_t& call_uuid_counter() noexcept {
+    thread_local uint32_t counter = 0;
+    return counter;
+}
+
+inline void reset_call_uuid_counter() noexcept {
+    call_uuid_counter() = 0;
 }
 
 inline std::pair<function_point_t, function_call_uuid_t> get_call_uuid(
     const std::source_location loc = std::source_location::current()) noexcept {
     function_point_t fp{loc.function_name(), loc.file_name(), loc.line(), loc.column()};
-    return {fp, function_call_uuid_t{get_new_raw_uuid()}};
+    return {fp, function_call_uuid_t{call_uuid_counter()++}};
 }
