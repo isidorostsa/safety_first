@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include "proof_checker_defs.h"
 #include <tuple>
 
@@ -25,15 +27,10 @@ struct _equals {
         DISCERN(r1);
         DISCERN(r2);
 
-        CALL_IMPLEMENTATION;
+        CALL_PRIMITIVE_INTERFACE_ON(self_equality, r1, r1);
+        GIVEN(self_equality);
 
-        DISCERN(result);
-
-        CALL_PRIMITIVE_INTERFACE_ON(known_prim_result, r1, r1);
-        CLAIM(known_prim_result);
-
-        CALL_PRIMITIVE_INTERFACE_ON(prim_result, r1, r2);
-        CLAIM_EQUAL_BOOL(prim_result, result);
+        CALL_PRIMITIVE_INTERFACE;
 
         IF (result) {
             SUBSTITUTABLE(r1, r2);
