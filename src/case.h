@@ -162,15 +162,21 @@ public:
         }
     }
 
-    r make_r(const value_uuid_t _uuid = get_new_uuid()) {
+    r make_r(const char* var_name = "",
+             const value_uuid_t _uuid = get_new_uuid(),
+             std::source_location loc = std::source_location::current()) {
         r result(_uuid);
         ledger.track(result.get_uuid());
+        ledger.set_definition_place(result.get_uuid(), loc, var_name);
         return result;
     }
 
-    r make_r_copy(r const &other, const value_uuid_t _uuid = get_new_uuid()) {
+    r make_r_copy(r const &other, const char* var_name = "",
+                  const value_uuid_t _uuid = get_new_uuid(),
+                  std::source_location loc = std::source_location::current()) {
         r result(_uuid);
         ledger.track(result.get_uuid());
+        ledger.set_definition_place(result.get_uuid(), loc, var_name);
         ledger.set_substitutable(result.get_uuid(), other.get_uuid());
         return result;
     }

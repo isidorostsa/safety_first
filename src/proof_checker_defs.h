@@ -20,12 +20,12 @@
 
 #define APPLY(M, ...) JOIN(APPLY, NUM_ARGS(__VA_ARGS__))(M, __VA_ARGS__)
 
-#define MAKE_R_COPY(x) c.make_r_copy(x)
-#define MAKE_R_IGNORE(x) c.make_r()
+#define MAKE_R_COPY(x) c.make_r_copy(x, #x)
+#define MAKE_R_IGNORE(x) c.make_r(#x)
 
 #define PRIMITIVE_IMPLEMENTATION(...) \
     IMPLEMENTATION(__VA_ARGS__) \
-        return c.make_r(); \
+        return c.make_r("result"); \
     }
 
 #define CHECK(...) \
@@ -47,31 +47,35 @@
     (!in_preconditions && (care_about_this && is_being_checked))
 
 // NOTE: the `type` argument is currently ignored in CALL_INTERFACE macros
-#define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, ...)\
+#define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, var_name_str, ...)\
     auto temp_var_name = foo::interface<RESPONSIBLE, false                 \
         >(c, {__VA_ARGS__});                    \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
     }                                                               \
     r var_name = std::move(temp_var_name.value());                  \
+    c.ledger.set_definition_place(var_name.get_uuid(),              \
+        std::source_location::current(), var_name_str);             \
     (void)0
 
 #define CALL_INTERFACE(type, var_name, foo, ...)            \
     CALL_INTERFACE_IMPL(type, var_name, foo,                \
-    JOIN(__call_interface_temp_, __COUNTER__), __VA_ARGS__)
+    JOIN(__call_interface_temp_, __COUNTER__), #var_name, __VA_ARGS__)
 
-#define CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo, temp_var_name, args_tuple)\
+#define CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo, temp_var_name, var_name_str, args_tuple)\
     auto temp_var_name = foo::interface<RESPONSIBLE, false          \
         >(c, args_tuple);                                          \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
     }                                                               \
     r var_name = std::move(temp_var_name.value());                  \
+    c.ledger.set_definition_place(var_name.get_uuid(),              \
+        std::source_location::current(), var_name_str);             \
     (void)0
 
 #define CALL_INTERFACE_TUPLE(type, var_name, foo, args_tuple)  \
     CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo,             \
-    JOIN(__call_interface_temp_, __COUNTER__), args_tuple)
+    JOIN(__call_interface_temp_, __COUNTER__), #var_name, args_tuple)
 
 #define CALL_PRIMITIVE_INTERFACE                                         \
     CALL_IMPLEMENTATION;                                                    \
@@ -90,7 +94,7 @@ _Pragma("clang diagnostic pop")                             \
         if constexpr (is_being_checked) {                   \
             return implementation(c, args);                 \
         } else {                                            \
-            return c.make_r();                              \
+            return c.make_r("result");                      \
         }                                                   \
     }();                                                    \
     if constexpr (is_being_checked) {                       \
@@ -205,7 +209,7 @@ _Pragma("clang diagnostic pop")                             \
 
 #define RETURN_VOID                     \
     static_assert(!in_preconditions);   \
-    return c.make_r_copy(Case::_void)
+    return c.make_r_copy(Case::_void, "void")
 
 
 #define INTERFACE(...) \
@@ -247,7 +251,8 @@ _Pragma("clang diagnostic pop")                             \
         IMPLEMENTATION(__VA_ARGS__) \
             RETURN_VOID; \
         } \
-        INTERFACE(__VA_ARGS__)
+        INTERFACE(__VA_ARGS__) \
+        CALL_IMPLEMENTATION;
 
 #define END_TEST(...) \
             RETURN_VOID; \
@@ -274,41 +279,47 @@ using propagate_errors_if_t = std::conditional_t<
     std::expected<r, impossible_branch_t>
 >;
 
-template<typename Foo>
+template<typename Foo, bool silent = false>
 bool verify_interface() {
     Case c;
     bool found_successful_case = false;
 
     do {
-        std::println("------");
-        std::println("Going to try path: {}", c.values);
+        if constexpr (!silent) {
+            std::println("------");
+            std::println("Going to try path: {}", c.values);
+        }
 
         if (auto res = Foo::check(c)) {
-            std::println("Passed path: {}", c.values);
+            if constexpr (!silent) std::println("Passed path: {}", c.values);
             found_successful_case = true;
         } else {
             auto const& err = res.error();
             if (std::holds_alternative<impossible_branch_t>(err)) {
-                std::println("Pruned path: {}", c.values);
+                if constexpr (!silent) std::println("Pruned path: {}", c.values);
             } else {
-                auto const& loc = std::get<erroneous_branch_t>(err).loc;
-                std::println("Failed path: {} (at {}:{})", c.values, loc.file_name(), loc.line());
-                std::println("  Branches:");
-                for (size_t i = 0; i < c.branch_locations.size(); ++i) {
-                    auto const& bl = c.branch_locations[i];
-                    std::println("    [{}] -\t{}\t- {}:{}", i, c.values[i], bl.file_name(), bl.line());
+                if (!silent) {
+                    auto const& loc = std::get<erroneous_branch_t>(err).loc;
+                    std::println("Failed path: {} (at {}:{})", c.values, loc.file_name(), loc.line());
+                    std::println("  Branches:");
+                    for (size_t i = 0; i < c.branch_locations.size(); ++i) {
+                        auto const& bl = c.branch_locations[i];
+                        std::println("    [{}] -\t{}\t- {}:{}", i, c.values[i], bl.file_name(), bl.line());
+                    }
+                    std::println("    [x] -\tFAILED\t- {}:{}", loc.file_name(), loc.line());
                 }
-                std::println("    [x] -\tFAILED\t- {}:{}", loc.file_name(), loc.line());
                 return false;
             }
         }
     } while (c.prepare_next_iteration());
 
-    if (!found_successful_case) {
-        std::println("No successful case found");
-    }
+    if constexpr (!silent) {
+        if (!found_successful_case) {
+            std::println("No successful case found");
+        }
 
-    std::println("------");
-    std::println("Finished");
+        std::println("------");
+        std::println("Finished");
+    }
     return true;
 }
