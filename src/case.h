@@ -11,6 +11,7 @@
 #include <functional>
 #include <map>
 #include <ranges>
+#include <stdexcept>
 
 #include "util.h"
 #include "r.h"
@@ -20,12 +21,21 @@
 
 struct r;
 
+enum class direction : uint8_t {
+    True,
+    False,
+    ForcedFalse
+};
+
+template<>
+struct std::formatter<direction> : std::formatter<std::string_view> {
+    auto format(direction e, auto &ctx) const {
+        constexpr std::string_view names[] = {"True", "False", "ForcedFalse"};
+        return std::formatter<std::string_view>::format(names[static_cast<int>(e)], ctx);
+    }
+};
+
 struct Case {
-    enum class direction : uint8_t {
-        True,
-        False,
-        ForcedFalse
-    };
 
     using enum direction;
 
@@ -51,11 +61,44 @@ private:
     }
 
 
+    void dump_contradiction(r const &g) {
+        std::println("=== CONTRADICTION DETECTED ===");
+        std::println("Value {} is substitutable with both _true and _false.",
+                     ledger.describe_value(g.get_uuid()));
+        std::println("");
+
+        std::println("Current path: {}", values);
+        std::println("Branch locations:");
+        for (size_t i = 0; i < branch_locations.size(); ++i) {
+            auto const& bl = branch_locations[i];
+            std::println("  [{}] {} - {}:{}", i, values[i], bl.file_name(), bl.line());
+        }
+        std::println("");
+
+        std::println("--- Path to _true ---");
+        auto trace_true = ledger.trace_claim(g.get_uuid(), _true.get_uuid());
+        ledger.dump_trace(trace_true);
+        std::println("");
+
+        std::println("--- Path to _false ---");
+        auto trace_false = ledger.trace_claim(g.get_uuid(), _false.get_uuid());
+        ledger.dump_trace(trace_false);
+        std::println("");
+
+        std::println("--- Equivalence classes ---");
+        ledger.dump_graph();
+        std::println("");
+
+        std::println("--- Function call graph ---");
+        ledger.dump_calls_graph();
+    }
+
     [[nodiscard]] std::optional<bool> decided_direction(r const &g) {
         bool eq_true = ledger.is_substitutable_with(g.get_uuid(), _true.get_uuid());
         bool eq_false = ledger.is_substitutable_with(g.get_uuid(), _false.get_uuid());
         if (eq_true && eq_false) {
-            throw;
+            dump_contradiction(g);
+            throw std::runtime_error("Contradiction: value is substitutable with both _true and _false");
         } else if (eq_true) {
             return true;
         } else if (eq_false) {
@@ -242,14 +285,5 @@ public:
         reset_call_uuid_counter();
         branch_locations.clear();
         return increment();
-    }
-};
-
-
-template<>
-struct std::formatter<Case::direction> : std::formatter<std::string_view> {
-    auto format(Case::direction e, auto &ctx) const {
-        constexpr std::string_view names[] = {"True", "False", "ForcedFalse"};
-        return std::formatter<std::string_view>::format(names[static_cast<int>(e)], ctx);
     }
 };

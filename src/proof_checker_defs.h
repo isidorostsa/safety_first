@@ -47,9 +47,9 @@
     (!in_preconditions && (care_about_this && is_being_checked))
 
 // NOTE: the `type` argument is currently ignored in CALL_INTERFACE macros
-#define CALL_INTERFACE_IMPL(type, var_name, foo, temp_var_name, var_name_str, ...)\
-    auto temp_var_name = foo::interface<RESPONSIBLE, false                 \
-        >(c, {__VA_ARGS__});                    \
+#define CALL_INTERFACE_IMPL(type, var_name, foo, _is_being_checked, temp_var_name, var_name_str, ...)\
+    auto temp_var_name = foo::interface<RESPONSIBLE, _is_being_checked \
+        >(c, {__VA_ARGS__});                                        \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
     }                                                               \
@@ -58,13 +58,13 @@
         std::source_location::current(), var_name_str);             \
     (void)0
 
-#define CALL_INTERFACE(type, var_name, foo, ...)            \
-    CALL_INTERFACE_IMPL(type, var_name, foo,                \
+#define CALL_INTERFACE(type, var_name, foo, ...)                    \
+    CALL_INTERFACE_IMPL(type, var_name, foo, false,                 \
     JOIN(__call_interface_temp_, __COUNTER__), #var_name, __VA_ARGS__)
 
 #define CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo, temp_var_name, var_name_str, args_tuple)\
     auto temp_var_name = foo::interface<RESPONSIBLE, false          \
-        >(c, args_tuple);                                          \
+        >(c, args_tuple);                                           \
     if (not temp_var_name) {                                        \
         return temp_var_name;                                       \
     }                                                               \
@@ -72,27 +72,30 @@
     c.ledger.set_definition_place(var_name.get_uuid(),              \
         std::source_location::current(), var_name_str);             \
     (void)0
+
+
 
 #define CALL_INTERFACE_TUPLE(type, var_name, foo, args_tuple)  \
     CALL_INTERFACE_TUPLE_IMPL(type, var_name, foo,             \
     JOIN(__call_interface_temp_, __COUNTER__), #var_name, args_tuple)
 
-#define CALL_PRIMITIVE_INTERFACE                                         \
+#define CALL_PRIMITIVE_INTERFACE                                            \
     CALL_IMPLEMENTATION;                                                    \
-    CALL_INTERFACE_TUPLE(bool, primitive_result, _primitive, args);  \
+    CALL_INTERFACE_TUPLE(bool, primitive_result, _primitive, args);         \
     SUBSTITUTABLE(result, primitive_result)
 
-#define CALL_PRIMITIVE_INTERFACE_ON(var_name, ...)              \
-    CALL_INTERFACE(bool, var_name, _primitive, __VA_ARGS__)
+#define CALL_PRIMITIVE_INTERFACE_ON(var_name, ...)                          \
+    CALL_INTERFACE_IMPL(type, var_name, _primitive, is_being_checked,       \
+    JOIN(__call_interface_temp_, __COUNTER__), #var_name, __VA_ARGS__)
 
-#define CALL_IMPLEMENTATION                                      \
+#define CALL_IMPLEMENTATION                                 \
 _Pragma("clang diagnostic push")                            \
 _Pragma("clang diagnostic ignored \"-Wshadow\"")            \
     constexpr bool in_preconditions = false;                \
 _Pragma("clang diagnostic pop")                             \
     auto __result_tmp = [&] {                               \
         if constexpr (is_being_checked) {                   \
-            return implementation(c, args);                 \
+            return implementation(c, call_uuid, args);      \
         } else {                                            \
             return c.make_r("result");                      \
         }                                                   \
@@ -179,10 +182,12 @@ _Pragma("clang diagnostic pop")                             \
     (void)0
 
 
-#define INTERFACE_START                                         \
-    static_assert(in_preconditions);                            \
-    static_assert(!is_being_checked || care_about_this);        \
-    auto [function_name, function_call] = get_call_uuid(loc)
+#define INTERFACE_START                                             \
+    static_assert(in_preconditions);                                \
+    auto call_uuid = get_call_uuid(loc);                            \
+    auto const& [function_name, function_call] = call_uuid;         \
+    (void)0
+// static_assert(!is_being_checked || care_about_this);        \
 
 #define IMPLEMENTATION_START                                \
     constexpr bool care_about_this = true;                  \
@@ -191,7 +196,8 @@ _Pragma("clang diagnostic push")                            \
 _Pragma("clang diagnostic ignored \"-Wshadow\"")            \
     constexpr bool in_preconditions = false;                \
 _Pragma("clang diagnostic pop")                             \
-    auto [function_name, function_call] = get_call_uuid(loc)
+    auto const& [function_name, function_call] = interface_call_uuid; \
+    (void)0
 
 #define TURN_TO_R(...) r
 #define TURN_TO_R_ref(...) r&
@@ -220,7 +226,7 @@ _Pragma("clang diagnostic pop")                             \
 
 #define IMPLEMENTATION(...) \
     constexpr static std::source_location loc = std::source_location::current();\
-    static propagate_errors_if_t<true> implementation(Case& c, std::tuple<APPLY(TURN_TO_R_ref, __VA_ARGS__)> args) {\
+    static propagate_errors_if_t<true> implementation(Case& c, call_uuid_t interface_call_uuid, std::tuple<APPLY(TURN_TO_R_ref, __VA_ARGS__)> args) {\
         IMPLEMENTATION_START;\
         auto&& [__VA_ARGS__] = args;
 
@@ -233,18 +239,6 @@ _Pragma("clang diagnostic pop")                             \
     constexpr static std::source_location loc = std::source_location::current();         \
     static propagate_errors_if_t<true> implementation(Case& c, std::tuple<> args) {      \
         IMPLEMENTATION_START;
-
-// Test macros — eliminate boilerplate for testing function interfaces.
-// Write preconditions before CALL_IMPLEMENTATION (failures prune the path),
-// and postconditions after (failures are errors).
-//
-// Usage:
-//   TEST(test_name, r1, r2)
-//       SUBSTITUTABLE(r1, r2);       // precondition
-//       CALL_IMPLEMENTATION;
-//       CALL_INTERFACE(bool, eq, _equals, r1, r2);
-//       CLAIM(eq);                    // postcondition
-//   END_TEST(r1, r2)
 
 #define TEST(name, ...) \
     struct name { \

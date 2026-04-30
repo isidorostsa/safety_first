@@ -85,7 +85,12 @@ inline void reset_call_uuid_counter() noexcept {
     call_uuid_counter() = 0;
 }
 
-inline std::pair<function_point_t, function_call_uuid_t> get_call_uuid(
+struct call_uuid_t {
+    function_point_t function_point;
+    function_call_uuid_t function_call;
+};
+
+inline call_uuid_t get_call_uuid(
     const std::source_location loc = std::source_location::current()) noexcept {
     function_point_t fp{loc.function_name(), loc.file_name(), loc.line(), loc.column()};
     return {fp, function_call_uuid_t{call_uuid_counter()++}};

@@ -60,6 +60,8 @@ struct _or {
 
         CALL_PRIMITIVE_INTERFACE;
 
+        DISCERN(result);
+
         RETURN_RESULT;
     }
 

@@ -60,6 +60,8 @@ struct _implies {
 
         CALL_PRIMITIVE_INTERFACE;
 
+        DISCERN(result);
+
         RETURN_RESULT;
     }
 

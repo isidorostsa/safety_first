@@ -238,7 +238,7 @@ public:
         }
     }
 
-    [[nodiscard]] value_uuid_t find_const(value_uuid_t t) const {
+    value_uuid_t find_const(value_uuid_t t) const {
         if (t.raw >= parent.size()) return t;
         while (parent[t.raw] != t) {
             t = parent[t.raw];
@@ -310,7 +310,12 @@ public:
         for (auto const& group : classes) {
             auto cls = nlohmann::json::array();
             for (auto idx : group) {
-                const auto&[func, inputs, outputs] = calls[idx.raw];
+                const auto&[
+                    func,
+                    inputs,
+                    outputs
+                ] = calls[idx.raw];
+
                 nlohmann::json entry;
                 entry["idx"] = idx.raw;
                 entry["func"] = func_label(func);
@@ -366,7 +371,7 @@ private:
         return {{"id", id}, {"label", label}, {"var", var}};
     }
 
-    std::string func_label(function_point_t const& fp) const {
+    static std::string func_label(function_point_t const& fp) {
         if (fp.file_name.empty() && fp.function_name.empty())
             return "";
         // "basename:line (short_func)"
@@ -384,7 +389,7 @@ private:
         return result;
     }
 
-    [[nodiscard]] nlohmann::json trace_to_json(TraceNode const& node) const {
+    nlohmann::json trace_to_json(TraceNode const& node) const {
         nlohmann::json j;
         j["a"] = value_json(node.a);
         j["b"] = value_json(node.b);
@@ -427,6 +432,24 @@ private:
 public:
     void dump_trace(TraceNode const& trace) const {
         std::print("{}\n", trace_to_json(trace).dump(2));
+    }
+
+    std::string describe_value(value_uuid_t v) const {
+        auto id = v.raw;
+        if (id == 0) return "_true (id=0)";
+        if (id == 1) return "_false (id=1)";
+        if (id == 2) return "_void (id=2)";
+
+        std::string result = std::format("r{}", id);
+        if (id < variable_names.size() && !variable_names[id].empty()) {
+            result += std::format(" \"{}\"", variable_names[id]);
+        }
+        if (id < definition_place.size()) {
+            auto const& loc = definition_place[id];
+            if (loc.file_name() != nullptr && loc.file_name()[0] != '\0')
+                result += std::format(" at {}:{}", basename(loc.file_name()), loc.line());
+        }
+        return result;
     }
 
     // Call recording for repeatability

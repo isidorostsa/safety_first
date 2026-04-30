@@ -6,6 +6,7 @@
 struct _bool_true {
     IMPLEMENTATION0()
         // Should not be called
+        std::println("Was called");
         assert(false);
         return c.make_r_copy(Case::_true);
     }
@@ -13,16 +14,14 @@ struct _bool_true {
     INTERFACE0()
         static_assert(not is_being_checked);
         CALL_IMPLEMENTATION;
-        IF(result) {
-            RETURN_RESULT;
-        } else {
-            KILL_BRANCH;
-        }
+        CLAIM(result);
+        RETURN_RESULT;
     }
 };
 
 struct _bool_false {
     IMPLEMENTATION0()
+        std::println("Was called");
         assert(false);
         return c.make_r_copy(Case::_false);
     }
@@ -30,11 +29,8 @@ struct _bool_false {
     INTERFACE0()
         static_assert(not is_being_checked);
         CALL_IMPLEMENTATION;
-        IF(result) {
-            KILL_BRANCH;
-        } else {
-            RETURN_RESULT;
-        }
+        CLAIM_FALSE(result);
+        RETURN_RESULT;
     }
 };
 

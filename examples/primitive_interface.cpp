@@ -40,31 +40,17 @@ TEST(test_not_not_is_original_generic, r1)
     CALL_INTERFACE(bool, not_not_not_r1, _not, not_not_r1);
     CALL_INTERFACE(bool, not_not_not_not_r1, _not, not_not_not_r1);
 
-    GIVEN_FALSE(r1);
-
     CLAIM_EQUAL_BOOL(r1, not_not_r1);
     CLAIM_EQUAL_BOOL(not_r1, not_not_not_r1);
     CLAIM_EQUAL_BOOL(r1, not_not_not_not_r1);
     CLAIM_EQUAL_BOOL(not_not_r1, not_not_not_not_r1);
 END_TEST(r1);
-
 
 TEST(test_not_not_is_original_generic_undecided, r1)
     CALL_INTERFACE(bool, not_r1, _not, r1);
-
-    CALL_INTERFACE(bool, r1_or_not_r1, _or, r1, not_r1);
-    GIVEN(r1_or_not_r1);
-
     CALL_INTERFACE(bool, not_not_r1, _not, not_r1);
-    CALL_INTERFACE(bool, not_not_not_r1, _not, not_not_r1);
-    CALL_INTERFACE(bool, not_not_not_not_r1, _not, not_not_not_r1);
-
-    CLAIM_EQUAL_BOOL(r1, not_not_r1);
-    CLAIM_EQUAL_BOOL(not_r1, not_not_not_r1);
-    CLAIM_EQUAL_BOOL(r1, not_not_not_not_r1);
-    CLAIM_EQUAL_BOOL(not_not_r1, not_not_not_not_r1);
+    CLAIM_EQUAL_BOOL(not_not_r1, r1);
 END_TEST(r1);
-
 
 int main () {
     verify_interface<test_equals_substitutable>();
